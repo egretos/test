@@ -2,6 +2,7 @@
     "name": "challenge/dummy-json-users",
     "description": "Framework-agnostic user service for the DummyJSON API.",
     "type": "library",
+    "license": "proprietary",
     "require": {
         "php": ">=8.4.1",
         "symfony/http-client": "^8.1"
@@ -24,5 +25,9 @@
         "psr-4": {
             "Challenge\\DummyJsonUsers\\Tests\\": "tests/"
         }
+    },
+    "scripts": {
+        "analyse": "phpstan analyse",
+        "test": "phpunit"
     }
 }

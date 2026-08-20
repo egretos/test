@@ -36,7 +36,7 @@ final readonly class UserService
 
         $response = $this->request('GET', sprintf('/users/%d', $id));
 
-        if ($response->getStatusCode() === 404) {
+        if ($this->responseStatusCode($response) === 404) {
             throw UserNotFound::withId($id);
         }
 
@@ -105,16 +105,25 @@ final readonly class UserService
         try {
             return $this->httpClient->request($method, rtrim($this->baseUrl, '/') . $path, $options);
         } catch (TransportExceptionInterface $exception) {
-            throw new ApiRequestFailed('DummyJSON API request failed before a response was received.', 0, $exception);
+            throw ApiRequestFailed::fromTransportException($exception);
         }
     }
 
     private function throwIfResponseFailed(ResponseInterface $response): void
     {
-        $statusCode = $response->getStatusCode();
+        $statusCode = $this->responseStatusCode($response);
 
         if ($statusCode < 200 || $statusCode >= 300) {
             throw ApiRequestFailed::forStatusCode($statusCode);
+        }
+    }
+
+    private function responseStatusCode(ResponseInterface $response): int
+    {
+        try {
+            return $response->getStatusCode();
+        } catch (TransportExceptionInterface $exception) {
+            throw ApiRequestFailed::fromTransportException($exception);
         }
     }
 
@@ -124,12 +133,21 @@ final readonly class UserService
     private function decode(ResponseInterface $response): array
     {
         try {
-            $decoded = json_decode($response->getContent(false), true, 512, JSON_THROW_ON_ERROR);
+            $decoded = json_decode($this->responseContent($response), true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
             throw InvalidApiResponse::invalidJson();
         }
 
         return $this->ensureArrayResponseData($decoded);
+    }
+
+    private function responseContent(ResponseInterface $response): string
+    {
+        try {
+            return $response->getContent(false);
+        } catch (TransportExceptionInterface $exception) {
+            throw ApiRequestFailed::fromTransportException($exception);
+        }
     }
 
     /**

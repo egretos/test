@@ -184,10 +184,44 @@ final class UserServiceTest extends TestCase
         }
     }
 
+    public function testItThrowsApiRequestFailedForTransportErrors(): void
+    {
+        $http = new HttpRequestRecorder([
+            new MockResponse('', ['error' => 'Network failure']),
+        ]);
+        $service = new UserService($http->client());
+
+        $http->assertNoRequests();
+
+        try {
+            $service->getUserById(1);
+            self::fail('Expected ApiRequestFailed to be thrown.');
+        } catch (ApiRequestFailed) {
+            $http->assertRequest('GET', 'https://dummyjson.com/users/1');
+        }
+    }
+
     public function testItThrowsInvalidApiResponseForMissingUserFields(): void
     {
         $http = new HttpRequestRecorder([
             new MockResponse('{"id":1,"firstName":"Emily"}'),
+        ]);
+        $service = new UserService($http->client());
+
+        $http->assertNoRequests();
+
+        try {
+            $service->getUserById(1);
+            self::fail('Expected InvalidApiResponse to be thrown.');
+        } catch (InvalidApiResponse) {
+            $http->assertRequest('GET', 'https://dummyjson.com/users/1');
+        }
+    }
+
+    public function testItThrowsInvalidApiResponseForInvalidJson(): void
+    {
+        $http = new HttpRequestRecorder([
+            new MockResponse('not json'),
         ]);
         $service = new UserService($http->client());
 
