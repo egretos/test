@@ -19,7 +19,7 @@ final class HttpRequestRecorder
      * @param list<MockResponse> $responses
      */
     public function __construct(
-        private array $responses,
+        private array $responses = [],
     ) {
     }
 

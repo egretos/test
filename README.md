@@ -12,13 +12,6 @@ Install dependencies locally:
 composer install
 ```
 
-If you are using the included Docker PHP runtime:
-
-```bash
-source ./php-aliases.sh
-composer install
-```
-
 ## Usage
 
 ```php
@@ -28,7 +21,7 @@ use Challenge\DummyJsonUsers\Service\UserService;
 
 require __DIR__ . '/vendor/autoload.php';
 
-$users = UserService::createHttpClient();
+$users = UserService::createDefault();
 
 $user = $users->getUserById(1);
 $page = $users->listUsers(page: 1, perPage: 10);
@@ -49,6 +42,30 @@ The base URL can be overridden for testing or alternate environments:
 ```php
 $service = new UserService($httpClient, 'https://example.test/api');
 ```
+
+## Custom Requests
+
+This package intentionally models only the user operations required by the assessment. For other DummyJSON endpoints, `request()` provides a small escape hatch without turning the package into a full SDK.
+
+`request()` keeps package-controlled behavior for:
+
+- base URL handling
+- Symfony HTTP options
+- failed status-code handling
+- transport error wrapping
+- JSON decoding
+
+It returns the decoded JSON response as an array:
+
+```php
+$carts = $users->request('GET', '/carts', [
+    'query' => [
+        'limit' => 10,
+    ],
+]);
+```
+
+Custom requests do not map responses to DTOs. DTOs are only provided for the modeled user operations.
 
 ## DTOs
 
@@ -97,15 +114,21 @@ Run static analysis:
 composer analyse
 ```
 
+Run PSR-12 style checks:
+
+```bash
+composer style
+```
+
 Validate Composer metadata:
 
 ```bash
-composer validate
+composer validate --strict
 ```
 
 ## Local PHP Runtime
 
-The included Dockerfile provides PHP 8.4 with Composer and PHPUnit-required extensions.
+The included Dockerfile is only a local development helper. The package itself does not depend on Docker.
 
 Build it:
 
@@ -113,15 +136,8 @@ Build it:
 docker build -t local-php .
 ```
 
-Load project-local aliases:
+Run tools through the container:
 
 ```bash
-source ./php-aliases.sh
-```
-
-Then use PHP and Composer from this directory:
-
-```bash
-php -v
-composer test
+docker run --rm -i --user "$(id -u):$(id -g)" -v "$PWD":/app local-php composer test
 ```

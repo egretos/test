@@ -9,7 +9,8 @@
     },
     "require-dev": {
         "phpunit/phpunit": "^13.3",
-        "phpstan/phpstan": "^2.2"
+        "phpstan/phpstan": "^2.2",
+        "squizlabs/php_codesniffer": "^4.0"
     },
     "config": {
         "platform": {
@@ -28,6 +29,8 @@
     },
     "scripts": {
         "analyse": "phpstan analyse",
+        "style": "phpcs",
+        "style:fix": "phpcbf",
         "test": "phpunit"
     }
 }

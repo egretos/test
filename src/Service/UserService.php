@@ -9,6 +9,7 @@ use Challenge\DummyJsonUsers\Dto\User;
 use Challenge\DummyJsonUsers\Exception\ApiRequestFailed;
 use Challenge\DummyJsonUsers\Exception\InvalidApiResponse;
 use Challenge\DummyJsonUsers\Exception\UserNotFound;
+use InvalidArgumentException;
 use JsonException;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
@@ -23,9 +24,9 @@ final readonly class UserService
     ) {
     }
 
-    public static function createHttpClient(?HttpClientInterface $httpClient = null): self
+    public static function createDefault(): self
     {
-        return new self($httpClient ?? HttpClient::create());
+        return new self(HttpClient::create());
     }
 
     public function getUserById(int $id): User
@@ -34,7 +35,7 @@ final readonly class UserService
             throw new UserNotFound('User ID must be greater than zero.');
         }
 
-        $response = $this->request('GET', sprintf('/users/%d', $id));
+        $response = $this->sendRequest('GET', sprintf('/users/%d', $id));
 
         if ($this->responseStatusCode($response) === 404) {
             throw UserNotFound::withId($id);
@@ -50,11 +51,12 @@ final readonly class UserService
      */
     public function listUsers(int $page = 1, int $perPage = 30): PaginatedUsers
     {
-        $page = max(1, $page);
-        $perPage = max(1, $perPage);
+        $this->ensurePositiveInteger($page, 'page');
+        $this->ensurePositiveInteger($perPage, 'perPage');
+
         $skip = ($page - 1) * $perPage;
 
-        $response = $this->request('GET', '/users', [
+        $response = $this->sendRequest('GET', '/users', [
             'query' => [
                 'limit' => $perPage,
                 'skip' => $skip,
@@ -84,7 +86,11 @@ final readonly class UserService
 
     public function addUser(string $firstName, string $lastName, string $email): int
     {
-        $response = $this->request('POST', '/users/add', [
+        $firstName = $this->ensureNonEmptyString($firstName, 'firstName');
+        $lastName = $this->ensureNonEmptyString($lastName, 'lastName');
+        $email = $this->ensureValidEmail($email);
+
+        $response = $this->sendRequest('POST', '/users/add', [
             'json' => [
                 'firstName' => $firstName,
                 'lastName' => $lastName,
@@ -97,10 +103,55 @@ final readonly class UserService
         return $this->readInt($this->decode($response), 'id');
     }
 
+    private function ensurePositiveInteger(int $value, string $field): void
+    {
+        if ($value < 1) {
+            throw new InvalidArgumentException(sprintf('%s must be greater than zero.', $field));
+        }
+    }
+
+    private function ensureNonEmptyString(string $value, string $field): string
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            throw new InvalidArgumentException(sprintf('%s must not be empty.', $field));
+        }
+
+        return $value;
+    }
+
+    private function ensureValidEmail(string $email): string
+    {
+        $email = $this->ensureNonEmptyString($email, 'email');
+
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            throw new InvalidArgumentException('email must be a valid email address.');
+        }
+
+        return $email;
+    }
+
+    /**
+     * Makes a custom request to the configured DummyJSON resource and returns decoded response data.
+     *
+     * @param array<string, mixed> $options
+     *
+     * @return array<string, mixed>
+     */
+    public function request(string $method, string $path, array $options = []): array
+    {
+        $response = $this->sendRequest($method, $path, $options);
+
+        $this->throwIfResponseFailed($response);
+
+        return $this->decode($response);
+    }
+
     /**
      * @param array<string, mixed> $options
      */
-    private function request(string $method, string $path, array $options = []): ResponseInterface
+    private function sendRequest(string $method, string $path, array $options = []): ResponseInterface
     {
         try {
             return $this->httpClient->request($method, rtrim($this->baseUrl, '/') . $path, $options);

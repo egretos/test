@@ -11,6 +11,8 @@ use Challenge\DummyJsonUsers\Exception\InvalidApiResponse;
 use Challenge\DummyJsonUsers\Exception\UserNotFound;
 use Challenge\DummyJsonUsers\Service\UserService;
 use Challenge\DummyJsonUsers\Tests\Support\HttpRequestRecorder;
+use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
@@ -62,6 +64,30 @@ final class UserServiceTest extends TestCase
         $service->getUserById(1);
 
         $http->assertRequest('GET', 'https://example.test/api/users/1');
+    }
+
+    public function testItRejectsInvalidPage(): void
+    {
+        $http = new HttpRequestRecorder();
+        $service = new UserService($http->client());
+
+        $http->assertNoRequests();
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $service->listUsers(page: 0);
+    }
+
+    public function testItRejectsInvalidPerPage(): void
+    {
+        $http = new HttpRequestRecorder();
+        $service = new UserService($http->client());
+
+        $http->assertNoRequests();
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $service->listUsers(perPage: 0);
     }
 
     public function testItRetrievesPaginatedUsers(): void
@@ -138,6 +164,123 @@ final class UserServiceTest extends TestCase
             'https://dummyjson.com/users/add',
             '{"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com"}',
         );
+    }
+
+    public function testItAllowsCustomRequests(): void
+    {
+        $http = new HttpRequestRecorder([
+            new MockResponse(json_encode([
+                'carts' => [
+                    [
+                        'id' => 1,
+                    ],
+                ],
+                'total' => 1,
+                'skip' => 0,
+                'limit' => 1,
+            ], JSON_THROW_ON_ERROR)),
+        ]);
+        $service = new UserService($http->client());
+
+        $http->assertNoRequests();
+
+        $response = $service->request('GET', '/carts', [
+            'query' => [
+                'limit' => 1,
+            ],
+        ]);
+
+        $http->assertRequest('GET', 'https://dummyjson.com/carts?limit=1');
+        self::assertSame([
+            'carts' => [
+                [
+                    'id' => 1,
+                ],
+            ],
+            'total' => 1,
+            'skip' => 0,
+            'limit' => 1,
+        ], $response);
+    }
+
+    public function testCustomRequestsCanSendJsonBodies(): void
+    {
+        $http = new HttpRequestRecorder([
+            new MockResponse(json_encode([
+                'ok' => true,
+            ], JSON_THROW_ON_ERROR)),
+        ]);
+        $service = new UserService($http->client());
+
+        $http->assertNoRequests();
+
+        $response = $service->request('POST', '/custom', [
+            'json' => [
+                'name' => 'Ada',
+            ],
+        ]);
+
+        $http->assertRequest('POST', 'https://dummyjson.com/custom', '{"name":"Ada"}');
+        self::assertSame(['ok' => true], $response);
+    }
+
+    public function testCustomRequestsUseDomainApiFailures(): void
+    {
+        $http = new HttpRequestRecorder([
+            new MockResponse('{"message":"Internal error"}', ['http_code' => 500]),
+        ]);
+        $service = new UserService($http->client());
+
+        $http->assertNoRequests();
+
+        try {
+            $service->request('GET', '/anything');
+            self::fail('Expected ApiRequestFailed to be thrown.');
+        } catch (ApiRequestFailed) {
+            $http->assertRequest('GET', 'https://dummyjson.com/anything');
+        }
+    }
+
+    /**
+     * @param non-empty-string $firstName
+     * @param non-empty-string $lastName
+     * @param non-empty-string $email
+     */
+    #[DataProvider('invalidNewUserData')]
+    public function testItRejectsInvalidNewUserData(string $firstName, string $lastName, string $email): void
+    {
+        $http = new HttpRequestRecorder();
+        $service = new UserService($http->client());
+
+        $http->assertNoRequests();
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $service->addUser($firstName, $lastName, $email);
+    }
+
+    /**
+     * @return array<string, array{firstName: string, lastName: string, email: string}>
+     */
+    public static function invalidNewUserData(): array
+    {
+        return [
+            'empty first name' => [
+                'firstName' => '',
+                'lastName' => 'Lovelace',
+                'email' => 'ada@example.com',
+            ],
+            'empty last name' => [
+                'firstName' => 'Ada',
+                'lastName' => '',
+                'email' => 'ada@example.com',
+            ],
+            'invalid email' => [
+                'firstName' => 'Ada',
+                'lastName' => 'Lovelace',
+                'email' => 'not-an-email',
+            ],
+        ];
     }
 
     public function testUserCanBeSerializedToJson(): void

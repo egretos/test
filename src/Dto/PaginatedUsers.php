@@ -6,6 +6,10 @@ namespace Challenge\DummyJsonUsers\Dto;
 
 use JsonSerializable;
 
+/**
+ * @phpstan-type UserArray array{id: int, firstName: string, lastName: string, email: string}
+ * @phpstan-type PaginatedUsersArray array{users: list<UserArray>, total: int, limit: int, skip: int}
+ */
 final readonly class PaginatedUsers implements JsonSerializable
 {
     /**
@@ -20,7 +24,7 @@ final readonly class PaginatedUsers implements JsonSerializable
     }
 
     /**
-     * @return array{users: list<array{id: int, firstName: string, lastName: string, email: string}>, total: int, limit: int, skip: int}
+     * @return PaginatedUsersArray
      */
     public function toArray(): array
     {
@@ -36,7 +40,7 @@ final readonly class PaginatedUsers implements JsonSerializable
     }
 
     /**
-     * @return array{users: list<array{id: int, firstName: string, lastName: string, email: string}>, total: int, limit: int, skip: int}
+     * @return PaginatedUsersArray
      */
     public function jsonSerialize(): array
     {
