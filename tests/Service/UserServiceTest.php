@@ -10,15 +10,15 @@ use Challenge\DummyJsonUsers\Exception\ApiRequestFailed;
 use Challenge\DummyJsonUsers\Exception\InvalidApiResponse;
 use Challenge\DummyJsonUsers\Exception\UserNotFound;
 use Challenge\DummyJsonUsers\Service\UserService;
+use Challenge\DummyJsonUsers\Tests\Support\HttpRequestRecorder;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
 final class UserServiceTest extends TestCase
 {
     public function testItRetrievesSingleUserById(): void
     {
-        $service = new UserService(new MockHttpClient([
+        $http = new HttpRequestRecorder([
             new MockResponse(json_encode([
                 'id' => 1,
                 'firstName' => 'Emily',
@@ -26,9 +26,14 @@ final class UserServiceTest extends TestCase
                 'email' => 'emily.johnson@example.com',
                 'ignored' => 'value',
             ], JSON_THROW_ON_ERROR)),
-        ]));
+        ]);
+        $service = new UserService($http->client());
+
+        $http->assertNoRequests();
 
         $user = $service->getUserById(1);
+
+        $http->assertRequest('GET', 'https://dummyjson.com/users/1');
 
         self::assertInstanceOf(User::class, $user);
         self::assertSame(1, $user->id);
@@ -40,9 +45,28 @@ final class UserServiceTest extends TestCase
         ], $user->toArray());
     }
 
+    public function testItUsesCustomBaseUrl(): void
+    {
+        $http = new HttpRequestRecorder([
+            new MockResponse(json_encode([
+                'id' => 1,
+                'firstName' => 'Emily',
+                'lastName' => 'Johnson',
+                'email' => 'emily.johnson@example.com',
+            ], JSON_THROW_ON_ERROR)),
+        ]);
+        $service = new UserService($http->client(), 'https://example.test/api/');
+
+        $http->assertNoRequests();
+
+        $service->getUserById(1);
+
+        $http->assertRequest('GET', 'https://example.test/api/users/1');
+    }
+
     public function testItRetrievesPaginatedUsers(): void
     {
-        $service = new UserService(new MockHttpClient([
+        $http = new HttpRequestRecorder([
             new MockResponse(json_encode([
                 'users' => [
                     [
@@ -59,33 +83,61 @@ final class UserServiceTest extends TestCase
                     ],
                 ],
                 'total' => 208,
-                'skip' => 10,
+                'skip' => 20,
                 'limit' => 10,
             ], JSON_THROW_ON_ERROR)),
-        ]));
+        ]);
+        $service = new UserService($http->client());
 
-        $users = $service->listUsers(page: 2, perPage: 10);
+        $http->assertNoRequests();
+
+        $users = $service->listUsers(page: 3, perPage: 10);
+
+        $http->assertRequest('GET', 'https://dummyjson.com/users?limit=10&skip=20');
 
         self::assertInstanceOf(PaginatedUsers::class, $users);
-        self::assertCount(2, $users->users);
-        self::assertSame(208, $users->total);
-        self::assertSame(10, $users->skip);
-        self::assertSame(10, $users->limit);
-        self::assertSame('Michael', $users->users[1]->firstName);
+        self::assertSame([
+            'users' => [
+                [
+                    'id' => 1,
+                    'firstName' => 'Emily',
+                    'lastName' => 'Johnson',
+                    'email' => 'emily.johnson@example.com',
+                ],
+                [
+                    'id' => 2,
+                    'firstName' => 'Michael',
+                    'lastName' => 'Williams',
+                    'email' => 'michael.williams@example.com',
+                ],
+            ],
+            'total' => 208,
+            'limit' => 10,
+            'skip' => 20,
+        ], $users->toArray());
     }
 
     public function testItAddsUserAndReturnsId(): void
     {
-        $service = new UserService(new MockHttpClient([
+        $http = new HttpRequestRecorder([
             new MockResponse(json_encode([
                 'id' => 209,
                 'firstName' => 'Ada',
                 'lastName' => 'Lovelace',
                 'email' => 'ada@example.com',
             ], JSON_THROW_ON_ERROR), ['http_code' => 201]),
-        ]));
+        ]);
+        $service = new UserService($http->client());
+
+        $http->assertNoRequests();
 
         self::assertSame(209, $service->addUser('Ada', 'Lovelace', 'ada@example.com'));
+
+        $http->assertRequest(
+            'POST',
+            'https://dummyjson.com/users/add',
+            '{"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com"}',
+        );
     }
 
     public function testUserCanBeSerializedToJson(): void
@@ -100,34 +152,52 @@ final class UserServiceTest extends TestCase
 
     public function testItThrowsUserNotFoundFor404(): void
     {
-        $service = new UserService(new MockHttpClient([
+        $http = new HttpRequestRecorder([
             new MockResponse('{"message":"User not found"}', ['http_code' => 404]),
-        ]));
+        ]);
+        $service = new UserService($http->client());
 
-        $this->expectException(UserNotFound::class);
+        $http->assertNoRequests();
 
-        $service->getUserById(999);
+        try {
+            $service->getUserById(999);
+            self::fail('Expected UserNotFound to be thrown.');
+        } catch (UserNotFound) {
+            $http->assertRequest('GET', 'https://dummyjson.com/users/999');
+        }
     }
 
     public function testItThrowsApiRequestFailedForServerErrors(): void
     {
-        $service = new UserService(new MockHttpClient([
+        $http = new HttpRequestRecorder([
             new MockResponse('{"message":"Internal error"}', ['http_code' => 500]),
-        ]));
+        ]);
+        $service = new UserService($http->client());
 
-        $this->expectException(ApiRequestFailed::class);
+        $http->assertNoRequests();
 
-        $service->listUsers();
+        try {
+            $service->listUsers();
+            self::fail('Expected ApiRequestFailed to be thrown.');
+        } catch (ApiRequestFailed) {
+            $http->assertRequest('GET', 'https://dummyjson.com/users?limit=30&skip=0');
+        }
     }
 
     public function testItThrowsInvalidApiResponseForMissingUserFields(): void
     {
-        $service = new UserService(new MockHttpClient([
+        $http = new HttpRequestRecorder([
             new MockResponse('{"id":1,"firstName":"Emily"}'),
-        ]));
+        ]);
+        $service = new UserService($http->client());
 
-        $this->expectException(InvalidApiResponse::class);
+        $http->assertNoRequests();
 
-        $service->getUserById(1);
+        try {
+            $service->getUserById(1);
+            self::fail('Expected InvalidApiResponse to be thrown.');
+        } catch (InvalidApiResponse) {
+            $http->assertRequest('GET', 'https://dummyjson.com/users/1');
+        }
     }
 }

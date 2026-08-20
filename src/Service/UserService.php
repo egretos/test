@@ -70,7 +70,7 @@ final readonly class UserService
         }
 
         $users = array_map(
-            fn (mixed $user): User => $this->arrayToUserDTO($this->assertArray($user)),
+            fn (mixed $user): User => $this->arrayToUserDTO($this->ensureArrayResponseData($user)),
             array_values($data['users']),
         );
 
@@ -129,7 +129,7 @@ final readonly class UserService
             throw InvalidApiResponse::invalidJson();
         }
 
-        return $this->assertArray($decoded);
+        return $this->ensureArrayResponseData($decoded);
     }
 
     /**
@@ -148,7 +148,7 @@ final readonly class UserService
     /**
      * @return array<string, mixed>
      */
-    private function assertArray(mixed $value): array
+    private function ensureArrayResponseData(mixed $value): array
     {
         if (!is_array($value)) {
             throw InvalidApiResponse::invalidJson();
