@@ -227,7 +227,12 @@ final class UserServiceTest extends TestCase
     public function testCustomRequestsUseDomainApiFailures(): void
     {
         $http = new HttpRequestRecorder([
-            new MockResponse('{"message":"Internal error"}', ['http_code' => 500]),
+            new MockResponse('{"message":"Too many requests"}', [
+                'http_code' => 429,
+                'response_headers' => [
+                    'Retry-After' => '60',
+                ],
+            ]),
         ]);
         $service = new UserService($http->client());
 
@@ -236,8 +241,13 @@ final class UserServiceTest extends TestCase
         try {
             $service->request('GET', '/anything');
             self::fail('Expected ApiRequestFailed to be thrown.');
-        } catch (ApiRequestFailed) {
+        } catch (ApiRequestFailed $exception) {
             $http->assertRequest('GET', 'https://dummyjson.com/anything');
+            self::assertSame(429, $exception->getStatusCode());
+            self::assertSame(429, $exception->getCode());
+            self::assertSame('{"message":"Too many requests"}', $exception->getResponseBody());
+            self::assertSame('60', $exception->getRetryAfter());
+            self::assertStringContainsString('Retry-After: 60', $exception->getMessage());
         }
     }
 
@@ -322,8 +332,12 @@ final class UserServiceTest extends TestCase
         try {
             $service->listUsers();
             self::fail('Expected ApiRequestFailed to be thrown.');
-        } catch (ApiRequestFailed) {
+        } catch (ApiRequestFailed $exception) {
             $http->assertRequest('GET', 'https://dummyjson.com/users?limit=30&skip=0');
+            self::assertSame(500, $exception->getStatusCode());
+            self::assertSame(500, $exception->getCode());
+            self::assertSame('{"message":"Internal error"}', $exception->getResponseBody());
+            self::assertNull($exception->getRetryAfter());
         }
     }
 
@@ -339,8 +353,12 @@ final class UserServiceTest extends TestCase
         try {
             $service->getUserById(1);
             self::fail('Expected ApiRequestFailed to be thrown.');
-        } catch (ApiRequestFailed) {
+        } catch (ApiRequestFailed $exception) {
             $http->assertRequest('GET', 'https://dummyjson.com/users/1');
+            self::assertNull($exception->getStatusCode());
+            self::assertSame(0, $exception->getCode());
+            self::assertNull($exception->getResponseBody());
+            self::assertNull($exception->getRetryAfter());
         }
     }
 

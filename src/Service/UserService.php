@@ -165,7 +165,11 @@ final readonly class UserService
         $statusCode = $this->responseStatusCode($response);
 
         if ($statusCode < 200 || $statusCode >= 300) {
-            throw ApiRequestFailed::forStatusCode($statusCode);
+            throw ApiRequestFailed::forStatusCode(
+                statusCode: $statusCode,
+                responseBody: $this->responseContent($response),
+                headers: $this->responseHeaders($response),
+            );
         }
     }
 
@@ -196,6 +200,18 @@ final readonly class UserService
     {
         try {
             return $response->getContent(false);
+        } catch (TransportExceptionInterface $exception) {
+            throw ApiRequestFailed::fromTransportException($exception);
+        }
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    private function responseHeaders(ResponseInterface $response): array
+    {
+        try {
+            return $response->getHeaders(false);
         } catch (TransportExceptionInterface $exception) {
             throw ApiRequestFailed::fromTransportException($exception);
         }

@@ -6,7 +6,42 @@ This package targets PHP 8.4 and does not depend on Laravel, Drupal, WordPress, 
 
 ## Installation
 
-Install dependencies locally:
+This package is not published to Packagist. Install it from a Git repository by adding a Composer `repositories` entry in the consuming project:
+
+```json
+{
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "git@github.com:your-org/dummy-json-users.git"
+        }
+    ],
+    "require": {
+        "challenge/dummy-json-users": "dev-main"
+    }
+}
+```
+
+For local development, use a path repository instead:
+
+```json
+{
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../dummy-json-users",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
+    "require": {
+        "challenge/dummy-json-users": "*"
+    }
+}
+```
+
+Then install dependencies:
 
 ```bash
 composer install
